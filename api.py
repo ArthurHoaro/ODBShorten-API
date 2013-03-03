@@ -100,7 +100,7 @@ def getShortener(name = None, id = None):
     sql = "SELECT * "
     sql += "FROM shortener "
     if id is not None:
-        sql += "WHERE id = %s"
+        sql += "WHERE id_shortener = %s;"
         data = (id, )
     else:
         sql += "WHERE name=%s;"
@@ -142,7 +142,7 @@ def addLink(shortener = None, varPart = None, real = None):
     if real is None:
         real = request.GET.get('real', default=None)
 
-    if id_shortener is None or varPart is None or real is None:
+    if shortener is None or varPart is None or real is None:
         return { 
             ERROR_KEY: ERRORS['INVALID_PARAMETERS'],
             MESSAGE_KEY: 'Invalid parameters',
@@ -201,6 +201,43 @@ def addLink(shortener = None, varPart = None, real = None):
     except Exception, e:
         return { ERROR_KEY: ERRORS['UNEXPECTED'], MESSAGE_KEY: str(e) }
 
+@route('/link/get/last')
+def getLinkByVar(id_shortener = None):
+    """
+    Returns the last link of a shortener (sort by var_part)
+    @param shortener: shortener's id
+    """
+
+    if id_shortener is None:
+        id_shortener = request.GET.get('shortener', default=None)
+
+    if id_shortener is None:
+        return { ERROR_KEY: ERRORS['INVALID_PARAMETERS'], MESSAGE_KEY: 'Invalid parameters',
+            'route': '/link/get/last',
+            'params': {
+                'shortener': 'shortener\'s id',
+        } }
+
+
+    db = DBFactory.get_instance()
+    cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
+
+    sql = 'SELECT * '
+    sql += 'FROM link '    
+    sql += 'WHERE id_link = ( '
+    sql += ' SELECT MAX(id_link) FROM link '
+    sql += 'WHERE shortener = %s )'
+    data = (id_shortener, )  
+
+    try: 
+        cur.execute(sql, data)
+        result = cur.fetchone()
+        if result is not None:            
+            return json.dumps(result, default=dthandler)
+        else:
+            return { ERROR_KEY: ERRORS['LINK_NOT_FOUND'], MESSAGE_KEY: 'Link not found',}
+    except Exception, e: 
+        return { ERROR_KEY: ERRORS['UNEXPECTED'], MESSAGE_KEY: str(e) }
 
 @route('/link/get/byvar')
 def getLinkByVar(id_shortener = None, varPart = None):
@@ -232,9 +269,6 @@ def getLinkByVar(id_shortener = None, varPart = None):
     sql += 'WHERE shortener = %s '
     sql += 'AND var_part = %s;'
     data = (id_shortener, varPart)                
-    # try:
-    cur.execute(sql, data)
-    result = cur.fetchone()
 
     try: 
         cur.execute(sql, data)
