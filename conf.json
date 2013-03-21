@@ -4,6 +4,6 @@
 		"host": "DB_HOST",
 		"db": "DB_NAME",
 		"user": "DB_USERNAME",
-		"password": "DB_PWD",
+		"password": "DB_PWD"
 	}
 }
