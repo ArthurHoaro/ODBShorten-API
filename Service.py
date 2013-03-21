@@ -1,3 +1,11 @@
+#!/usr/bin/python
+
+import psycopg2
+import psycopg2.extras  
+
+GET_MAX_SIZE = 500
+CONNECTION_STRING = 'host=localhost dbname=shorten user=* password=*'
+
 class DBFactory:
     """Singleton DB Factory"""
 
@@ -21,49 +29,65 @@ class Service(object):
     
     def get(self, nb, **params):
         """ todo """
-        
         if nb > GET_MAX_SIZE:
             print "error"
         
         # Define SQL String from params
-        sql = "SELECT * FROM "+ self.table +" WHERE "
+        sql = "SELECT * FROM "+ self.table + " "
         cpt = 0
+        values = list()
         for key, value in params.items():
             if cpt != 0:
                 sql += "AND "
+            else:
+                sql += "WHERE "
             sql += str(key) +" = %s "
-        sql += "LIMIT "+ nb + " OFFSET 0"
+            values.append(value)
+            cpt = cpt + 1
+
+        sql += "LIMIT "+ str(nb) + " OFFSET 0"
         
         # Execute SQL statement
         db = DBFactory.get_instance()
         cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-        data = params.items()
+        data = tuple(values)
         
         try:
             cur.execute(sql, data)
-            result = cur.fetch()    
+            result = cur.fetchall()    
             return result
                 
         except Exception, e:
             raise e
-            
+    
+    def getOne(self, **params):
+        """todo"""
+        try:
+            return self.get(1, **params)[0]
+        except Exception, e:
+            raise e
             
     def add(self, **params):
         """ todo """
         
         # Define SQL String from params
-        sql = "SELECT * FROM "+ self.table +" WHERE "
-        cpt = 0
+        sql = columns = values_str = str()
+        sql += "INSERT INTO "+ self.table +" ( "
+        values = list()
         for key, value in params.items():
-            if cpt != 0:
-                sql += "AND "
-            sql += str(key) +" = %s "
-        sql += "LIMIT "+ nb + " OFFSET 0"
+            if cpt < len(params):
+                sep = ', '
+            else:
+                sep = ' '
+            columns += str(key) + sep
+            values.append(value)
+            values_str += '%s' + sep
+        sql += columns + ") VALUES ( "+ values_str + ")"
         
         # Execute SQL statement
         db = DBFactory.get_instance()
         cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-        data = params.items()
+        data = tuple(values)
         
         try:
             cur.execute(sql, data)
@@ -77,5 +101,17 @@ class ShortenerService(Service):
     """ todo """
 
     def __init__(self):
-        super(Service, self).__init__("Shortener")
+        super(ShortenerService, self).__init__("shortener")
+
+class LinkService(Service):
+    """ todo """
+
+    def __init__(self):
+        super(LinkService, self).__init__("link")
+
+if __name__ == '__main__':
+    s = ShortenerService()    
+    l = LinkService()
+    print s.getOne(id_shortener=2)
+    print len(l.get(150, shortener=222))
         
