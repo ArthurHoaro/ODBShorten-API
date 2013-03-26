@@ -67,13 +67,13 @@ class Service(object):
         except Exception, e:
             raise e
             
-    def add(self, **params):
+    def add(self, returning=None, **params):
         """ todo """
         
         # Define SQL String from params
-        sql = columns = values_str = str()
-        sql += "INSERT INTO "+ self.table +" ( "
+        sql = columns = values_str = returning_str = str()
         values = list()
+        cpt = 1
         for key, value in params.items():
             if cpt < len(params):
                 sep = ', '
@@ -82,8 +82,13 @@ class Service(object):
             columns += str(key) + sep
             values.append(value)
             values_str += '%s' + sep
-        sql += columns + ") VALUES ( "+ values_str + ")"
-        
+            cpt = cpt + 1
+
+        if returning is not None:
+            returning_str = 'RETURNING '+ returning
+
+        sql += "INSERT INTO "+ self.table +" ( "+ columns + ") VALUES ( "+ values_str + " ) " + returning_str
+        print sql
         # Execute SQL statement
         db = DBFactory.get_instance()
         cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
@@ -91,11 +96,12 @@ class Service(object):
         
         try:
             cur.execute(sql, data)
-            result = cur.fetch()    
-            return result
-                
+            db.commit()
+            if returning is not None:
+                result = cur.fetchone()[returning]   
+                return result                
         except Exception, e:
-            raise e
+            raise e      
             
 class ShortenerService(Service):
     """ todo """
@@ -112,6 +118,9 @@ class LinkService(Service):
 if __name__ == '__main__':
     s = ShortenerService()    
     l = LinkService()
+    re = l.add('id_link', shortener=1, var_part="kakakakakaka", real="http://test.com" )
+    print str(re) 
+    print type(re)
     print s.getOne(id_shortener=2)
     print len(l.get(150, shortener=222))
         
