@@ -25,6 +25,7 @@ from bottle import response
 import psycopg2
 import psycopg2.extras  
 from bottle import run, route, request
+from Service import *
 import json
 import base64
 import datetime
@@ -95,27 +96,19 @@ def getShortener(name = None, id = None):
             }
         }
 
-    db = DBFactory.get_instance()
-    cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-    sql = "SELECT * "
-    sql += "FROM shortener "
-    if id is not None:
-        sql += "WHERE id_shortener = %s;"
-        data = (id, )
-    else:
-        sql += "WHERE name=%s;"
-        data = (name,)
-
+    serv = ShortenerService()
     try:
-        cur.execute(sql, data)
-        result = cur.fetchone()
+        if id is not None:
+            shortener = serv.getOne(id_shortener=id)
+        else:
+            shortener = serv.getOne(name=name)
 
-        if len(result) > 0:
-            return json.dumps(result, default=dthandler)
+        if len(shortener) > 0:
+            return json.dumps(shortener, default=dthandler)
         else:
             return {
-                ERROR_KEY: ERRORS['SHORTENER_NOT_FOUND'], 
-                MESSAGE_KEY: 'Shortener not found',
+                    ERROR_KEY: ERRORS['SHORTENER_NOT_FOUND'], 
+                    MESSAGE_KEY: 'Shortener not found',
             }
     except Exception, e:
         return {
@@ -163,26 +156,17 @@ def addLink(shortener = None, varPart = None, real = None):
         else:
             return sdata
 
-    db = DBFactory.get_instance()
-    cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-
-    sql = 'INSERT INTO link '
-    sql += '(shortener, var_part, real, dateadd, last_edit) '
-    sql += 'VALUES (%s, %s, %s, now(), now()) '        
-    sql += 'RETURNING id_link;'
-    data = (id_shortener, varPart, real)
+    serv = LinkService()
 
     try: 
-        cur.execute(sql, data)
-        db.commit()
-        rid = cur.fetchone()['id_link']
+        rid = serv.add('id_link', shortener=id_shortener, var_part=varPart, real=real)
+        
         if rid is not None :
             return { 'id_link': rid }
         else:
             return { ERROR_KEY: ERRORS['LINK_ADD_FAIL'], MESSAGE_KEY: 'Link add failed'}
         
     except psycopg2.IntegrityError: 
-        db.rollback()
         data = json.loads(getLinkByVar(id_shortener, varPart))
         if ERROR_KEY not in data:
             return json.dumps(
@@ -218,20 +202,9 @@ def getLinkByVar(id_shortener = None):
                 'shortener': 'shortener\'s id',
         } }
 
-
-    db = DBFactory.get_instance()
-    cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-
-    sql = 'SELECT * '
-    sql += 'FROM link '    
-    sql += 'WHERE id_link = ( '
-    sql += ' SELECT MAX(id_link) FROM link '
-    sql += 'WHERE shortener = %s )'
-    data = (id_shortener, )  
-
+    serv = LinkService()
     try: 
-        cur.execute(sql, data)
-        result = cur.fetchone()
+        result = serv.getLast(id_shortener)
         if result is not None:            
             return json.dumps(result, default=dthandler)
         else:
@@ -261,18 +234,9 @@ def getLinkByVar(id_shortener = None, varPart = None):
         } }
 
 
-    db = DBFactory.get_instance()
-    cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-
-    sql = 'SELECT * '
-    sql += 'FROM link '
-    sql += 'WHERE shortener = %s '
-    sql += 'AND var_part = %s;'
-    data = (id_shortener, varPart)                
-
+    serv = LinkService()
     try: 
-        cur.execute(sql, data)
-        result = cur.fetchone()
+        result = serv.getOne(shortener=id_shortener, var_part=varPart)
         if len(result) > 0:            
             return json.dumps(result, default=dthandler)
         else:
@@ -290,7 +254,6 @@ def updatelink(id_link = None, newreal = None):
     """
 
     if id_link is None:
-
         id_link = request.GET.get('id_link', default=None)
     if newreal is None:
         newreal = request.GET.get('real', default=None)
@@ -304,25 +267,16 @@ def updatelink(id_link = None, newreal = None):
         } }
 
 
-    db = DBFactory.get_instance()
-    cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-    
-    sql = 'UPDATE link '
-    sql += 'SET real = %s, '
-    sql += 'last_edit = now() '
-    sql += 'WHERE id_link = %s '
-    sql += 'RETURNING id_link'
-    data = ( newreal,  id_link )        
-    try: 
-        cur.execute(sql, data)
-        db.commit()
-        if( len(cur.fetchall()) > 0 ):
-            return{ 'id': id_link }
-        else:
-            return { ERROR_KEY: ERRORS['LINK_NOTHING_UPDATE'], MESSAGE_KEY: 'Nothing to update' }
-    except Exception, e: 
-        db.rollback()
-        return { ERROR_KEY: ERRORS['UNEXPECTED'],MESSAGE_KEY: str(e)}
+    serv = LinkService()
+         
+    # try: 
+    res = serv.update('id_link', dict(id_link=id_link), real=newreal, last_edit='now()')
+    if len(res) > 0 :
+        return{ 'id': id_link }
+    else:
+        return { ERROR_KEY: ERRORS['LINK_NOTHING_UPDATE'], MESSAGE_KEY: 'Nothing to update' }
+    # except Exception, e: 
+    #     return { ERROR_KEY: ERRORS['UNEXPECTED'],MESSAGE_KEY: str(e)}
 
 @route('/errors.json')
 def getErrors():
@@ -340,18 +294,18 @@ def loadErrors(filename):
     except Exception, e:
         return False
 
-def loadConf(filename):
-    try:
-        data = json.load(open(filename))
-        global CONNECTION_STRING
-        CONNECTION_STRING = "host='"+ data['database']['host'] +"' "
-        CONNECTION_STRING += "dbname='"+ data['database']['db'] +"' "
-        CONNECTION_STRING += "user='"+ data['database']['user'] +"' "
-        CONNECTION_STRING += "password='"+ data['database']['password'] +"'"
-        return True
-    except Exception, e:
-        print str(e)
-        return False
+# def loadConf(filename):
+#     try:
+#         data = json.load(open(filename))
+#         global CONNECTION_STRING
+#         CONNECTION_STRING = "host='"+ data['database']['host'] +"' "
+#         CONNECTION_STRING += "dbname='"+ data['database']['db'] +"' "
+#         CONNECTION_STRING += "user='"+ data['database']['user'] +"' "
+#         CONNECTION_STRING += "password='"+ data['database']['password'] +"'"
+#         return True
+#     except Exception, e:
+#         print str(e)
+#         return False
 
 ##
 # MAIN
@@ -361,7 +315,7 @@ if __name__ == '__main__':
         print "EROOR: Unable to load 'errors.json' file"
         sys.exit()
     if loadConf('conf.json') is False:
-        print "EROOR: Unable to load 'conf.json' file"
+        print "ERROR: Unable to load 'conf.json' file"
         sys.exit()
 
     bottle.debug(True) # display traceback 

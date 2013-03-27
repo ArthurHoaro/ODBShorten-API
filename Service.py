@@ -1,10 +1,11 @@
 #!/usr/bin/python
 
 import psycopg2
-import psycopg2.extras  
+import psycopg2.extras
+import json
 
 GET_MAX_SIZE = 500
-CONNECTION_STRING = 'host=localhost dbname=shorten user=* password=*'
+CONNECTION_STRING = ''
 
 class DBFactory:
     """Singleton DB Factory"""
@@ -88,7 +89,7 @@ class Service(object):
             returning_str = 'RETURNING '+ returning
 
         sql += "INSERT INTO "+ self.table +" ( "+ columns + ") VALUES ( "+ values_str + " ) " + returning_str
-        print sql
+
         # Execute SQL statement
         db = DBFactory.get_instance()
         cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
@@ -101,7 +102,55 @@ class Service(object):
                 result = cur.fetchone()[returning]   
                 return result                
         except Exception, e:
-            raise e      
+            db.rollback()
+            raise e   
+
+    def update( self, returning, where, **params ):
+        """ TODO """
+
+        # Define SQL String from params
+        sql = columns = values_str = where_str = returning_str = str()
+        values = wheres = list()
+        cpt = 1
+        print len(params)
+        for key, value in params.items():
+            if cpt < len(params):
+                sep = ', '
+            else:
+                sep = ' '
+            values_str += str(key) +" = %s " + sep
+            values.append(value)
+            cpt = cpt + 1
+
+        cpt = 0
+        for key, value in where.items():
+            if cpt != 0:
+                sep = "AND "
+            else:
+                sep = "WHERE "
+            where_str += sep + " "+ str(key) +" = %s " 
+            wheres.append(value)
+            cpt = cpt + 1
+
+        if returning is not None:
+            returning_str = 'RETURNING '+ returning
+
+        sql += "UPDATE "+ self.table +" SET "+ values_str + " "+ where_str +" "+ returning_str
+        print sql
+        # Execute SQL statement
+        db = DBFactory.get_instance()
+        cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
+        data = tuple(values)
+        
+        try:
+            cur.execute(sql, data)
+            db.commit()
+            if returning is not None:
+                return cur.fetchall()       
+        except Exception, e:
+            db.rollback()
+            raise e   
+
             
 class ShortenerService(Service):
     """ todo """
@@ -115,12 +164,44 @@ class LinkService(Service):
     def __init__(self):
         super(LinkService, self).__init__("link")
 
+    def getLast(self, shortener):
+        db = DBFactory.get_instance()
+        cur = db.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
+
+        sql = 'SELECT * '
+        sql += 'FROM link '    
+        sql += 'WHERE id_link = ( '
+        sql += ' SELECT MAX(id_link) FROM link '
+        sql += 'WHERE shortener = %s )'
+        data = (shortener, )  
+
+        try: 
+            cur.execute(sql, data)
+            result = cur.fetchone()          
+            return result
+        except Exception, e: 
+            raise e
+
+def loadConf(filename):
+    try:
+        data = json.load(open(filename))
+        global CONNECTION_STRING
+        CONNECTION_STRING = "host='"+ data['database']['host'] +"' "
+        CONNECTION_STRING += "dbname='"+ data['database']['db'] +"' "
+        CONNECTION_STRING += "user='"+ data['database']['user'] +"' "
+        CONNECTION_STRING += "password='"+ data['database']['password'] +"'"
+        return True
+    except Exception, e:
+        print str(e)
+        return False
+
 if __name__ == '__main__':
     s = ShortenerService()    
     l = LinkService()
-    re = l.add('id_link', shortener=1, var_part="kakakakakaka", real="http://test.com" )
-    print str(re) 
-    print type(re)
+    #re = l.add('id_link', shortener=1, var_part="kakakakakaka", real="http://test.com" )
+    ru = l.update( 'id_link', dict( id_link=888193 ), var_part="elleestoulapoulette", real="http://elleestbiencachee.com" )
+    print str(ru) 
+    print type(ru)
     print s.getOne(id_shortener=2)
     print len(l.get(150, shortener=222))
         
