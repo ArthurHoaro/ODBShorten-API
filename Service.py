@@ -194,14 +194,4 @@ def loadConf(filename):
     except Exception, e:
         print str(e)
         return False
-
-if __name__ == '__main__':
-    s = ShortenerService()    
-    l = LinkService()
-    #re = l.add('id_link', shortener=1, var_part="kakakakakaka", real="http://test.com" )
-    ru = l.update( 'id_link', dict( id_link=888193 ), var_part="elleestoulapoulette", real="http://elleestbiencachee.com" )
-    print str(ru) 
-    print type(ru)
-    print s.getOne(id_shortener=2)
-    print len(l.get(150, shortener=222))
         

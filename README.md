@@ -6,8 +6,13 @@ Open Database of Shortened Links API
 Requirements
 ==============
 
-* Package python-devel, postgresql-devel and postgresql-libs
-* Modules
+OS Packages (on RPM systems):
 
-    easy_install psycopg2
-    easy_install bottle
+  * python-devel
+  * postgresql-devel
+  * postgresql-libs
+
+Python modules
+
+  * psycopg2
+  * bottle

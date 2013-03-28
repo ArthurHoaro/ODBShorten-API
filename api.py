@@ -30,7 +30,7 @@ import json
 import base64
 import datetime
 import sys
-#from errors import *
+import getopt
 
 dthandler = lambda obj: obj.isoformat() if isinstance(obj, datetime.datetime) else None
 ERROR_KEY = ''
@@ -294,30 +294,56 @@ def loadErrors(filename):
     except Exception, e:
         return False
 
-# def loadConf(filename):
-#     try:
-#         data = json.load(open(filename))
-#         global CONNECTION_STRING
-#         CONNECTION_STRING = "host='"+ data['database']['host'] +"' "
-#         CONNECTION_STRING += "dbname='"+ data['database']['db'] +"' "
-#         CONNECTION_STRING += "user='"+ data['database']['user'] +"' "
-#         CONNECTION_STRING += "password='"+ data['database']['password'] +"'"
-#         return True
-#     except Exception, e:
-#         print str(e)
-#         return False
-
 ##
 # MAIN
 ##
-if __name__ == '__main__':
+def main(argv):
+    """Main
+    Usage: api.py [-h <HOST>] [-p <PORT>] [-d <True|False>]
+    Arguments: 
+        * -h, --host
+            Website allowed hosts (default: "0.0.0.0" - everyone)
+        * -p, --port
+            Listen on port... (default: 7500)
+        * -d, --debug
+            Debug mode, print traceback True or False (default True)."""
+        
+    if argv is None:
+        argv = sys.argv
+    usage = '[SYNTAX] Usage: '+ argv[0] +' [-h <HOST>] [-p <PORT>] [-d <True|False>]'    
+    
+    try:
+        opts, args = getopt.getopt(argv[1:], "h:p:d", ["host=", "port=", "debug=", "help="])
+    except getopt.GetoptError, e:
+        print usage
+        print str(e)
+        sys.exit(2)
+        
+    if ('--help') in dict(opts):
+        print main.__doc__
+        sys.exit()
+        
     if loadErrors('errors.json') is False:
         print "EROOR: Unable to load 'errors.json' file"
         sys.exit()
     if loadConf('conf.json') is False:
         print "ERROR: Unable to load 'conf.json' file"
-        sys.exit()
-
-    bottle.debug(True) # display traceback 
-    run(host='0.0.0.0', port=7500, reloader=True)
+        sys.exit() 
     
+    host = '0.0.0.0'
+    port = 7500
+    debug = False
+    
+    for opt, arg in opts:
+        if opt in ("-h", "--host"):
+            host = arg
+        elif opt in ("-p", "--port"):
+            port = arg
+        elif opt in ("-d", "--debug"):
+            debug = True
+            
+    bottle.debug(debug) # display traceback 
+    run(host=host, port=port, reloader=True)
+    
+if __name__ == "__main__":
+    main(sys.argv)
